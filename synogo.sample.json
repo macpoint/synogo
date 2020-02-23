@@ -1,0 +1,7 @@
+{
+    "host" : "mynas:5001",
+    "scheme" : "https",
+    "username" : "username",
+    "password" : "pa$$w0rd",
+    "timeout" : 10
+  }
