@@ -248,7 +248,7 @@ func getDownloadTasks(client *synoclient.Client) {
 		return
 	}
 
-	downloadTasks, e := services.GetDownloadStationTasks(client, "all")
+	downloadTasks, e := services.ListDownloadStationTasks(client)
 	if e != nil {
 		fmt.Println(e)
 	}

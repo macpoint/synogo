@@ -32,7 +32,55 @@ type TaskDetail struct {
 	Uri         string
 }
 
-func GetDownloadStationTasks(client *synoclient.Client, status string) ([]DownloadStationTask, error) {
+type DsError struct {
+	desc string
+}
+
+func (dsError *DsError) Error() string {
+	return fmt.Sprintf("Download Station error: %v", dsError.desc)
+}
+
+// GetDownloadStationTask returns one DownloadStationTask
+func GetDownloadStationTask(client *synoclient.Client, taskID string) (DownloadStationTask, error) {
+	tasksMap, _ := GetDownloadStationTasks(client, taskID)
+	var dsTask DownloadStationTask
+	for i := range tasksMap {
+		if tasksMap[i].ID == taskID {
+			dsTask = tasksMap[i]
+		}
+	}
+
+	if dsTask.ID == "" {
+		return dsTask, &DsError{"Task not found."}
+	}
+
+	return dsTask, nil
+}
+
+// GetDownloadStationTasks returns download tasks using 'getinfo'
+func GetDownloadStationTasks(client *synoclient.Client, taskIds string) ([]DownloadStationTask, error) {
+	params := map[string]string{
+		"api":     "SYNO.DownloadStation.Task",
+		"version": "1",
+		"method":  "getinfo",
+		// SynoAPI accepts multiple IPs separated by comma
+		"id":         taskIds,
+		"additional": "transfer,detail",
+	}
+
+	resp, err := client.Get("webapi/DownloadStation/task.cgi", params)
+	if err != nil {
+		return nil, err
+	}
+
+	tasks := client.GetData(resp).(map[string]interface{})["tasks"].([]interface{})
+	downloadTasks := mapDownloadStationTask(tasks)
+
+	return downloadTasks, nil
+
+}
+
+func ListDownloadStationTasks(client *synoclient.Client) ([]DownloadStationTask, error) {
 
 	params := map[string]string{
 		"api":        "SYNO.DownloadStation.Task",
@@ -47,32 +95,7 @@ func GetDownloadStationTasks(client *synoclient.Client, status string) ([]Downlo
 	}
 
 	tasks := client.GetData(resp).(map[string]interface{})["tasks"].([]interface{})
-	var downloadTasks []DownloadStationTask
-	for _, task := range tasks {
-		t := task.(map[string]interface{})
-		transferInfo := t["additional"].(map[string]interface{})["transfer"].(map[string]interface{})
-		detailInfo := t["additional"].(map[string]interface{})["detail"].(map[string]interface{})
-		downloadTasks = append(
-			downloadTasks,
-			DownloadStationTask{
-				ID:       t["id"].(string),
-				Type:     t["type"].(string),
-				Size:     int64(t["size"].(float64)),
-				Status:   t["status"].(string),
-				Title:    t["title"].(string),
-				Username: t["username"].(string),
-				AdditinalTaskInfo: AdditinalTaskInfo{
-					TaskTransfer: TaskTransfer{
-						SizeDownloaded: int64(transferInfo["size_downloaded"].(float64)),
-						SpeedDownload:  int64(transferInfo["speed_download"].(float64)),
-					},
-					TaskDetail: TaskDetail{
-						Destination: detailInfo["destination"].(string),
-						Uri:         detailInfo["uri"].(string),
-					},
-				},
-			})
-	}
+	downloadTasks := mapDownloadStationTask(tasks)
 
 	return downloadTasks, nil
 
@@ -137,6 +160,36 @@ func ResumeDownloadStationTasks(client *synoclient.Client, taskIds string) (resp
 		return "", err
 	}
 	return response, nil
+}
+
+func mapDownloadStationTask(tasks []interface{}) []DownloadStationTask {
+	var downloadTasks []DownloadStationTask
+	for _, task := range tasks {
+		t := task.(map[string]interface{})
+		transferInfo := t["additional"].(map[string]interface{})["transfer"].(map[string]interface{})
+		detailInfo := t["additional"].(map[string]interface{})["detail"].(map[string]interface{})
+		downloadTasks = append(
+			downloadTasks,
+			DownloadStationTask{
+				ID:       t["id"].(string),
+				Type:     t["type"].(string),
+				Size:     int64(t["size"].(float64)),
+				Status:   t["status"].(string),
+				Title:    t["title"].(string),
+				Username: t["username"].(string),
+				AdditinalTaskInfo: AdditinalTaskInfo{
+					TaskTransfer: TaskTransfer{
+						SizeDownloaded: int64(transferInfo["size_downloaded"].(float64)),
+						SpeedDownload:  int64(transferInfo["speed_download"].(float64)),
+					},
+					TaskDetail: TaskDetail{
+						Destination: detailInfo["destination"].(string),
+						Uri:         detailInfo["uri"].(string),
+					},
+				},
+			})
+	}
+	return downloadTasks
 }
 
 func truncateString(str string, num int) string {
