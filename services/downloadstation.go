@@ -19,11 +19,17 @@ type DownloadStationTask struct {
 
 type AdditinalTaskInfo struct {
 	TaskTransfer TaskTransfer
+	TaskDetail   TaskDetail
 }
 
 type TaskTransfer struct {
 	SizeDownloaded int64
 	SpeedDownload  int64
+}
+
+type TaskDetail struct {
+	Destination string
+	Uri         string
 }
 
 func GetDownloadStationTasks(client *synoclient.Client, status string) ([]DownloadStationTask, error) {
@@ -32,7 +38,7 @@ func GetDownloadStationTasks(client *synoclient.Client, status string) ([]Downlo
 		"api":        "SYNO.DownloadStation.Task",
 		"version":    "1",
 		"method":     "list",
-		"additional": "transfer",
+		"additional": "transfer,detail",
 	}
 
 	resp, err := client.Get("webapi/DownloadStation/task.cgi", params)
@@ -45,6 +51,7 @@ func GetDownloadStationTasks(client *synoclient.Client, status string) ([]Downlo
 	for _, task := range tasks {
 		t := task.(map[string]interface{})
 		transferInfo := t["additional"].(map[string]interface{})["transfer"].(map[string]interface{})
+		detailInfo := t["additional"].(map[string]interface{})["detail"].(map[string]interface{})
 		downloadTasks = append(
 			downloadTasks,
 			DownloadStationTask{
@@ -58,6 +65,10 @@ func GetDownloadStationTasks(client *synoclient.Client, status string) ([]Downlo
 					TaskTransfer: TaskTransfer{
 						SizeDownloaded: int64(transferInfo["size_downloaded"].(float64)),
 						SpeedDownload:  int64(transferInfo["speed_download"].(float64)),
+					},
+					TaskDetail: TaskDetail{
+						Destination: detailInfo["destination"].(string),
+						Uri:         detailInfo["uri"].(string),
 					},
 				},
 			})

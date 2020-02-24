@@ -280,10 +280,11 @@ func formatDownloadTasks(dstasks []services.DownloadStationTask) {
 			task.Type,
 			task.Status,
 			fmt.Sprintf("%v%%", strconv.FormatInt(downloaded, 10)),
+			task.AdditinalTaskInfo.TaskDetail.Destination,
 		})
 	}
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Id", "Title", "Size", "Type", "Status", "Downloaded"})
+	table.SetHeader([]string{"Id", "Title", "Size", "Type", "Status", "Downloaded", "Destination"})
 
 	for _, v := range data {
 		table.Append(v)
