@@ -1,10 +1,9 @@
-package services
+package synoclient
 
 import (
+	"errors"
 	"fmt"
 	"sync"
-
-	"github.com/macpoint/synogo/synoclient"
 )
 
 type DownloadStationTask struct {
@@ -32,18 +31,25 @@ type TaskDetail struct {
 	Uri         string
 }
 
-type DsError struct {
-	desc string
-}
-
-func (dsError *DsError) Error() string {
-	return fmt.Sprintf("Download Station error: %v", dsError.desc)
+var DsSynoErrors = map[int]string{
+	400: "File upload failed",
+	401: "Max number of tasks reached",
+	402: "Destination denied",
+	403: "Destination does not exist",
+	404: "Invalid task id",
+	405: "Invalid task action",
+	406: "No default destination",
+	407: "Set destination failed",
+	408: "File does not exist",
 }
 
 // GetDownloadStationTask returns one DownloadStationTask
-func GetDownloadStationTask(client *synoclient.Client, taskID string) (DownloadStationTask, error) {
-	tasksMap, _ := GetDownloadStationTasks(client, taskID)
+func (c *Client) GetDownloadStationTask(taskID string) (DownloadStationTask, error) {
 	var dsTask DownloadStationTask
+	tasksMap, err := c.GetDownloadStationTasks(taskID)
+	if err != nil {
+		return dsTask, err
+	}
 	for i := range tasksMap {
 		if tasksMap[i].ID == taskID {
 			dsTask = tasksMap[i]
@@ -51,14 +57,14 @@ func GetDownloadStationTask(client *synoclient.Client, taskID string) (DownloadS
 	}
 
 	if dsTask.ID == "" {
-		return dsTask, &DsError{"Task not found."}
+		return dsTask, errors.New("Task not found")
 	}
 
 	return dsTask, nil
 }
 
 // GetDownloadStationTasks returns download tasks using 'getinfo'
-func GetDownloadStationTasks(client *synoclient.Client, taskIds string) ([]DownloadStationTask, error) {
+func (c *Client) GetDownloadStationTasks(taskIds string) ([]DownloadStationTask, error) {
 	params := map[string]string{
 		"api":     "SYNO.DownloadStation.Task",
 		"version": "1",
@@ -68,19 +74,19 @@ func GetDownloadStationTasks(client *synoclient.Client, taskIds string) ([]Downl
 		"additional": "transfer,detail",
 	}
 
-	resp, err := client.Get("webapi/DownloadStation/task.cgi", params)
+	resp, err := c.Get("webapi/DownloadStation/task.cgi", params)
 	if err != nil {
-		return nil, err
+		return nil, HandleApplicationError(resp, err, DsSynoErrors)
 	}
 
-	tasks := client.GetData(resp).(map[string]interface{})["tasks"].([]interface{})
+	tasks := c.GetData(resp).(map[string]interface{})["tasks"].([]interface{})
 	downloadTasks := mapDownloadStationTask(tasks)
 
 	return downloadTasks, nil
 
 }
 
-func ListDownloadStationTasks(client *synoclient.Client) ([]DownloadStationTask, error) {
+func (c *Client) ListDownloadStationTasks() ([]DownloadStationTask, error) {
 
 	params := map[string]string{
 		"api":        "SYNO.DownloadStation.Task",
@@ -89,19 +95,19 @@ func ListDownloadStationTasks(client *synoclient.Client) ([]DownloadStationTask,
 		"additional": "transfer,detail",
 	}
 
-	resp, err := client.Get("webapi/DownloadStation/task.cgi", params)
+	resp, err := c.Get("webapi/DownloadStation/task.cgi", params)
 	if err != nil {
-		return nil, err
+		return nil, HandleApplicationError(resp, err, DsSynoErrors)
 	}
 
-	tasks := client.GetData(resp).(map[string]interface{})["tasks"].([]interface{})
+	tasks := c.GetData(resp).(map[string]interface{})["tasks"].([]interface{})
 	downloadTasks := mapDownloadStationTask(tasks)
 
 	return downloadTasks, nil
 
 }
 
-func CreateDownloadStationTask(client *synoclient.Client, fileQueue <-chan string, wg *sync.WaitGroup) error {
+func (c *Client) CreateDownloadStationTask(fileQueue <-chan string, wg *sync.WaitGroup) error {
 
 	params := map[string]string{
 		"api":     "SYNO.DownloadStation.Task",
@@ -112,54 +118,55 @@ func CreateDownloadStationTask(client *synoclient.Client, fileQueue <-chan strin
 	for filename := range fileQueue {
 		params["uri"] = filename
 		fmt.Printf("Adding %v ...\n", truncateString(filename, 70))
-		_, err := client.Get("webapi/DownloadStation/task.cgi", params)
+		resp, err := c.Get("webapi/DownloadStation/task.cgi", params)
 		if err != nil {
-			return err
+			return HandleApplicationError(resp, err, DsSynoErrors)
 		}
 	}
 	return nil
 }
 
-func DeleteDownloadStationTasks(client *synoclient.Client, taskIds string) (response string, err error) {
+func (c *Client) DeleteDownloadStationTasks(taskIds string) (response string, err error) {
 	params := map[string]string{
 		"api":     "SYNO.DownloadStation.Task",
 		"version": "1",
 		"method":  "delete",
 		"id":      taskIds,
 	}
-	response, err = client.Get("webapi/DownloadStation/task.cgi", params)
+	resp, err := c.Get("webapi/DownloadStation/task.cgi", params)
 	if err != nil {
-		return "", err
+		//return "", handleDsError(resp, err)
+		return "", HandleApplicationError(resp, err, DsSynoErrors)
 	}
-	return response, nil
+	return resp, nil
 }
 
-func PauseDownloadStationTasks(client *synoclient.Client, taskIds string) (response string, err error) {
+func (c *Client) PauseDownloadStationTasks(taskIds string) (response string, err error) {
 	params := map[string]string{
 		"api":     "SYNO.DownloadStation.Task",
 		"version": "1",
 		"method":  "pause",
 		"id":      taskIds,
 	}
-	response, err = client.Get("webapi/DownloadStation/task.cgi", params)
+	resp, err := c.Get("webapi/DownloadStation/task.cgi", params)
 	if err != nil {
-		return "", err
+		return "", HandleApplicationError(resp, err, DsSynoErrors)
 	}
-	return response, nil
+	return resp, nil
 }
 
-func ResumeDownloadStationTasks(client *synoclient.Client, taskIds string) (response string, err error) {
+func (c *Client) ResumeDownloadStationTasks(taskIds string) (response string, err error) {
 	params := map[string]string{
 		"api":     "SYNO.DownloadStation.Task",
 		"version": "1",
 		"method":  "resume",
 		"id":      taskIds,
 	}
-	response, err = client.Get("webapi/DownloadStation/task.cgi", params)
+	resp, err := c.Get("webapi/DownloadStation/task.cgi", params)
 	if err != nil {
-		return "", err
+		return "", HandleApplicationError(resp, err, DsSynoErrors)
 	}
-	return response, nil
+	return resp, nil
 }
 
 func mapDownloadStationTask(tasks []interface{}) []DownloadStationTask {

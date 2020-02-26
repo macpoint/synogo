@@ -17,7 +17,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/macpoint/synogo/services"
 	"github.com/macpoint/synogo/synoclient"
 	"github.com/olekukonko/tablewriter"
 )
@@ -45,6 +44,7 @@ func main() {
 	delete := flag.String("d", "", "Delete tasks ids separated by comma")
 	pause := flag.String("p", "", "Pause tasks ids separated by comma")
 	resume := flag.String("r", "", "Resume tasks ids separated by comma")
+	move := flag.String("m", "", "Move downloaded file to destination")
 
 	flag.Parse()
 	if *file != "" {
@@ -76,8 +76,41 @@ func main() {
 		return
 	}
 
+	if *move != "" {
+
+		if len(flag.Args()) != 1 {
+			printUsage()
+			return
+		}
+		moveDownloadedFile(client, *move, flag.Args()[0])
+		return
+	}
+
+	printUsage()
+
+}
+
+func printUsage() {
 	fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
 	flag.PrintDefaults()
+}
+
+func moveDownloadedFile(client *synoclient.Client, taskID string, destination string) {
+	// Login
+	_, err := client.Login()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	task, err := client.GetDownloadStationTask(taskID)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println(task)
+	client.Logout()
 }
 
 func deleteDownloadTasks(client *synoclient.Client, tasks string) {
@@ -88,7 +121,7 @@ func deleteDownloadTasks(client *synoclient.Client, tasks string) {
 		return
 	}
 
-	resp, err := services.DeleteDownloadStationTasks(client, tasks)
+	resp, err := client.DeleteDownloadStationTasks(tasks)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -112,7 +145,7 @@ func deleteDownloadTasks(client *synoclient.Client, tasks string) {
 	for _, result := range results {
 		r := result.(map[string]interface{})
 		if int(r["error"].(float64)) > 0 {
-			fmt.Printf("Could not delete task id %v (%v).\n", r["id"], r["error"])
+			fmt.Printf("Could not delete task id %v (%v).\n", r["id"], synoclient.DsSynoErrors[int(r["error"].(float64))])
 		} else {
 			fmt.Printf("Task %v deleted.\n", r["id"])
 		}
@@ -130,7 +163,7 @@ func resumeDownloadTasks(client *synoclient.Client, tasks string) {
 		return
 	}
 
-	resp, err := services.ResumeDownloadStationTasks(client, tasks)
+	resp, err := client.ResumeDownloadStationTasks(tasks)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -140,7 +173,7 @@ func resumeDownloadTasks(client *synoclient.Client, tasks string) {
 	for _, result := range results {
 		r := result.(map[string]interface{})
 		if int(r["error"].(float64)) > 0 {
-			fmt.Printf("Could not resume task id %v (%v).\n", r["id"], r["error"])
+			fmt.Printf("Could not resume task id %v (%v).\n", r["id"], synoclient.DsSynoErrors[int(r["error"].(float64))])
 		} else {
 			fmt.Printf("Task %v resumed.\n", r["id"])
 		}
@@ -158,7 +191,7 @@ func pauseDownloadTasks(client *synoclient.Client, tasks string) {
 		return
 	}
 
-	resp, err := services.PauseDownloadStationTasks(client, tasks)
+	resp, err := client.PauseDownloadStationTasks(tasks)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -168,7 +201,7 @@ func pauseDownloadTasks(client *synoclient.Client, tasks string) {
 	for _, result := range results {
 		r := result.(map[string]interface{})
 		if int(r["error"].(float64)) > 0 {
-			fmt.Printf("Could not pause task id %v (%v).\n", r["id"], r["error"])
+			fmt.Printf("Could not pause task id %v (%v).\n", r["id"], synoclient.DsSynoErrors[int(r["error"].(float64))])
 		} else {
 			fmt.Printf("Task %v paused.\n", r["id"])
 		}
@@ -202,7 +235,7 @@ func createDownloadTaskFromFile(client *synoclient.Client, filepath string) {
 
 	// create workers
 	for gr := 1; gr <= noOfWorkers; gr++ {
-		go services.CreateDownloadStationTask(client, fileProcessQueue, &wg)
+		go client.CreateDownloadStationTask(fileProcessQueue, &wg)
 	}
 
 	// fill the queue with each line of the file
@@ -231,7 +264,7 @@ func createDownloadTaskfromUrl(client *synoclient.Client, url string) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	urlProcessQueue := make(chan string)
-	go services.CreateDownloadStationTask(client, urlProcessQueue, &wg)
+	go client.CreateDownloadStationTask(urlProcessQueue, &wg)
 	urlProcessQueue <- url
 
 	close(urlProcessQueue)
@@ -248,7 +281,7 @@ func getDownloadTasks(client *synoclient.Client) {
 		return
 	}
 
-	downloadTasks, e := services.ListDownloadStationTasks(client)
+	downloadTasks, e := client.ListDownloadStationTasks()
 	if e != nil {
 		fmt.Println(e)
 	}
@@ -263,7 +296,7 @@ func getDownloadTasks(client *synoclient.Client) {
 	client.Logout()
 }
 
-func formatDownloadTasks(dstasks []services.DownloadStationTask) {
+func formatDownloadTasks(dstasks []synoclient.DownloadStationTask) {
 	var data [][]string
 	for _, task := range dstasks {
 		var downloaded int64

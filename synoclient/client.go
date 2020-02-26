@@ -92,7 +92,7 @@ func (c *Client) Get(path string, params map[string]string) (string, error) {
 
 	// assert common Synology API errors
 	if err := c.AssertResponse(body); err != nil {
-		return "", err
+		return string(body), err
 	}
 
 	// was:
@@ -114,49 +114,8 @@ func (c *Client) AssertResponse(responseBody []byte) (err error) {
 		return nil
 	}
 
-	errorBlock := responseData.(map[string]interface{})["error"]
-	errorCode := int(errorBlock.(map[string]interface{})["code"].(float64))
-	return &SynoError{code: errorCode}
-}
-
-func (c *Client) Login() (sid string, err error) {
-	loginParams := map[string]string{
-		"api":     "SYNO.API.Auth",
-		"version": "2",
-		"method":  "login",
-		"account": c.Username,
-		"passwd":  c.Password,
-		"session": c.Session,
-		"format":  "sid",
-	}
-	r, err := c.Get("webapi/auth.cgi", loginParams)
-	if err != nil {
-		return "", err
-	}
-
-	data := c.GetData(r)
-	sid = data.(map[string]interface{})["sid"].(string)
-
-	// set the sid field to pass with any subsequent request
-	c.Sid = sid
-	return sid, nil
-
-}
-
-func (c *Client) Logout() error {
-	logoutParams := map[string]string{
-		"api":     "SYNO.API.Auth",
-		"version": "2",
-		"method":  "logout",
-		"session": c.Session,
-	}
-
-	_, err := c.Get("webapi/auth.cgi", logoutParams)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	// this will handle just common Syno errors
+	return HandleCommonSynoError(responseData)
 }
 
 // get "data" object from json response
