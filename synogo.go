@@ -109,7 +109,22 @@ func moveDownloadedFile(client *synoclient.Client, taskID string, destination st
 		return
 	}
 
-	fmt.Println(task)
+	fileToMove := "/" + filepath.Join(task.AdditinalTaskInfo.TaskDetail.Destination, task.Title)
+	desiredFileName := filepath.Base(destination)
+	renamedFile, err := client.RenameFile(fileToMove, desiredFileName)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	destinationDir := filepath.Dir(destination)
+	err = client.MoveFile(renamedFile, destinationDir)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println("File moved.")
 	client.Logout()
 }
 

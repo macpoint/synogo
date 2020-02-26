@@ -135,7 +135,6 @@ func (c *Client) DeleteDownloadStationTasks(taskIds string) (response string, er
 	}
 	resp, err := c.Get("webapi/DownloadStation/task.cgi", params)
 	if err != nil {
-		//return "", handleDsError(resp, err)
 		return "", HandleApplicationError(resp, err, DsSynoErrors)
 	}
 	return resp, nil
