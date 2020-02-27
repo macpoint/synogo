@@ -11,7 +11,6 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -52,7 +51,7 @@ func main() {
 		return
 	}
 	if *url != "" {
-		createDownloadTaskfromUrl(client, *url)
+		createDownloadTaskfromURL(client, *url)
 		return
 	}
 
@@ -106,6 +105,11 @@ func moveDownloadedFile(client *synoclient.Client, taskID string, destination st
 	task, err := client.GetDownloadStationTask(taskID)
 	if err != nil {
 		fmt.Println(err)
+		return
+	}
+
+	if task.Status != "finished" {
+		fmt.Printf("File %v cannot be moved. It has not beed downloaded yet.\n", task.Title)
 		return
 	}
 
@@ -242,16 +246,22 @@ func createDownloadTaskFromFile(client *synoclient.Client, filepath string) {
 	defer file.Close()
 
 	// create sync & queue & add workers to sync group
-	var wg sync.WaitGroup
+	var processWg sync.WaitGroup
+	var errorWg sync.WaitGroup
 	const noOfWorkers = 3
 
-	wg.Add(noOfWorkers)
-	fileProcessQueue := make(chan string, 5)
+	processWg.Add(noOfWorkers)
+	errorWg.Add(1)
+	fileProcessQueue := make(chan string, noOfWorkers)
+	errorQueue := make(chan *synoclient.TaskAddError)
 
 	// create workers
 	for gr := 1; gr <= noOfWorkers; gr++ {
-		go client.CreateDownloadStationTask(fileProcessQueue, &wg)
+		go client.CreateDownloadStationTask(fileProcessQueue, errorQueue, &processWg)
 	}
+
+	// read the error queue
+	go readErrors(errorQueue, &errorWg)
 
 	// fill the queue with each line of the file
 	scanner := bufio.NewScanner(file)
@@ -260,15 +270,28 @@ func createDownloadTaskFromFile(client *synoclient.Client, filepath string) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
 	}
 
 	close(fileProcessQueue)
-	wg.Wait()
+	processWg.Wait()
+
+	close(errorQueue)
+	errorWg.Wait()
+
 	client.Logout()
 }
 
-func createDownloadTaskfromUrl(client *synoclient.Client, url string) {
+func readErrors(errorQueue <-chan *synoclient.TaskAddError, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for data := range errorQueue {
+		if data.Err != nil {
+			fmt.Printf("Task %v not added: %v\n", data.Name, data.Err)
+		}
+	}
+}
+
+func createDownloadTaskfromURL(client *synoclient.Client, url string) {
 	// Login
 	_, err := client.Login()
 	if err != nil {
@@ -276,14 +299,26 @@ func createDownloadTaskfromUrl(client *synoclient.Client, url string) {
 		return
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(1)
+	var processWg sync.WaitGroup
+	var errorWg sync.WaitGroup
+
+	processWg.Add(1)
+	errorWg.Add(1)
+
 	urlProcessQueue := make(chan string)
-	go client.CreateDownloadStationTask(urlProcessQueue, &wg)
+	errorQueue := make(chan *synoclient.TaskAddError, 5)
+
+	go client.CreateDownloadStationTask(urlProcessQueue, errorQueue, &processWg)
+	go readErrors(errorQueue, &errorWg)
+
 	urlProcessQueue <- url
 
 	close(urlProcessQueue)
-	wg.Wait()
+	processWg.Wait()
+
+	close(errorQueue)
+	errorWg.Wait()
+
 	client.Logout()
 }
 

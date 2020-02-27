@@ -31,6 +31,11 @@ type TaskDetail struct {
 	Uri         string
 }
 
+type TaskAddError struct {
+	Name string
+	Err  error
+}
+
 var DsSynoErrors = map[int]string{
 	400: "File upload failed",
 	401: "Max number of tasks reached",
@@ -107,7 +112,7 @@ func (c *Client) ListDownloadStationTasks() ([]DownloadStationTask, error) {
 
 }
 
-func (c *Client) CreateDownloadStationTask(fileQueue <-chan string, wg *sync.WaitGroup) error {
+func (c *Client) CreateDownloadStationTask(fileQueue <-chan string, errorQueue chan<- *TaskAddError, wg *sync.WaitGroup) error {
 
 	params := map[string]string{
 		"api":     "SYNO.DownloadStation.Task",
@@ -117,10 +122,10 @@ func (c *Client) CreateDownloadStationTask(fileQueue <-chan string, wg *sync.Wai
 	defer wg.Done()
 	for filename := range fileQueue {
 		params["uri"] = filename
-		fmt.Printf("Adding %v ...\n", truncateString(filename, 70))
+		fmt.Printf("Adding %v\n", truncateString(filename, 70))
 		resp, err := c.Get("webapi/DownloadStation/task.cgi", params)
 		if err != nil {
-			return HandleApplicationError(resp, err, DsSynoErrors)
+			errorQueue <- &TaskAddError{Name: filename, Err: HandleApplicationError(resp, err, DsSynoErrors)}
 		}
 	}
 	return nil
