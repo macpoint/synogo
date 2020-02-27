@@ -20,6 +20,8 @@ import (
 	"github.com/olekukonko/tablewriter"
 )
 
+const version = 0.1
+
 func main() {
 
 	config, err := synoclient.LoadJsonConfiguration(filepath.Join(os.Getenv("HOME"), ".synogo.json"))
