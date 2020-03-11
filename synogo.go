@@ -19,7 +19,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 )
 
-const version = 0.1
+const version = 1.1
 
 func main() {
 
