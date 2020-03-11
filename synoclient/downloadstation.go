@@ -46,6 +46,7 @@ var DsSynoErrors = map[int]string{
 	406: "No default destination",
 	407: "Set destination failed",
 	408: "File does not exist",
+	544: "Other error",
 }
 
 // GetDownloadStationTask returns one DownloadStationTask

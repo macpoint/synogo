@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/macpoint/synogo/synoclient"
@@ -46,6 +47,7 @@ func main() {
 	pause := flag.String("p", "", "Pause tasks ids separated by comma")
 	resume := flag.String("r", "", "Resume tasks ids separated by comma")
 	move := flag.String("m", "", "Move downloaded file to destination")
+	info := flag.String("i", "", "Display download task info")
 
 	flag.Parse()
 	if *file != "" {
@@ -84,6 +86,11 @@ func main() {
 			return
 		}
 		moveDownloadedFile(client, *move, flag.Args()[0])
+		return
+	}
+
+	if *info != "" {
+		getDownloadTaskInfo(client, *info)
 		return
 	}
 
@@ -346,6 +353,61 @@ func getDownloadTasks(client *synoclient.Client) {
 
 	// Logout
 	client.Logout()
+}
+
+func getDownloadTaskInfo(client *synoclient.Client, taskID string) {
+	// Login
+	_, err := client.Login()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	task, err := client.GetDownloadStationTask(taskID)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	maxlen := len("Size Downloaded: ")
+
+	fmt.Println(strings.Repeat("-", maxlen+len(task.Title)))
+
+	fmt.Printf(padTitle("Task title:", maxlen))
+	fmt.Println(task.Title)
+
+	fmt.Println(strings.Repeat("-", maxlen+len(task.Title)))
+
+	fmt.Printf(padTitle("Task ID:", maxlen))
+	fmt.Println(task.ID)
+
+	fmt.Printf(padTitle("Task type:", maxlen))
+	fmt.Println(task.Type)
+
+	fmt.Printf(padTitle("Task size:", maxlen))
+	fmt.Println(ByteCountSI(task.Size))
+
+	fmt.Printf(padTitle("Task status:", maxlen))
+	fmt.Println(task.Status)
+
+	fmt.Printf(padTitle("Username:", maxlen))
+	fmt.Println(task.Username)
+
+	fmt.Printf(padTitle("Size Downloaded:", maxlen))
+	fmt.Printf("%v B\n", task.AdditinalTaskInfo.TaskTransfer.SizeDownloaded)
+
+	fmt.Printf(padTitle("Download speed:", maxlen))
+	fmt.Println(task.AdditinalTaskInfo.TaskTransfer.SpeedDownload)
+
+	fmt.Printf(padTitle("Destination:", maxlen))
+	fmt.Println(task.AdditinalTaskInfo.TaskDetail.Destination)
+
+	// Logout
+	client.Logout()
+
+}
+
+func padTitle(title string, maxlen int) string {
+	return title + strings.Repeat(" ", maxlen-len(title))
 }
 
 func formatDownloadTasks(dstasks []synoclient.DownloadStationTask) {
