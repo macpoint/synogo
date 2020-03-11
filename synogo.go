@@ -385,6 +385,11 @@ func clearFinishedDownloadTasks(client *synoclient.Client) {
 		}
 	}
 
+	if len(finishedTasks) < 1 {
+		fmt.Println("No finished tasks found.")
+		return
+	}
+
 	ft := strings.Join(finishedTasks[:], ",")
 	resp, err := client.DeleteDownloadStationTasks(ft)
 	if err != nil {
