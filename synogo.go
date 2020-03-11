@@ -3,8 +3,6 @@ package main
 /*
 TODO
  - download station info
- - clear finished tasks
- - handle goroutine errors
 */
 
 import (
@@ -48,6 +46,7 @@ func main() {
 	resume := flag.String("r", "", "Resume tasks ids separated by comma")
 	move := flag.String("m", "", "Move downloaded file to destination")
 	info := flag.String("i", "", "Display download task info")
+	clear := flag.Bool("c", false, "Clear all finished download tasks")
 
 	flag.Parse()
 	if *file != "" {
@@ -91,6 +90,11 @@ func main() {
 
 	if *info != "" {
 		getDownloadTaskInfo(client, *info)
+		return
+	}
+
+	if *clear {
+		clearFinishedDownloadTasks(client)
 		return
 	}
 
@@ -349,6 +353,53 @@ func getDownloadTasks(client *synoclient.Client) {
 		formatDownloadTasks(downloadTasks)
 	} else {
 		fmt.Println("No download tasks found.")
+	}
+
+	// Logout
+	client.Logout()
+}
+
+func clearFinishedDownloadTasks(client *synoclient.Client) {
+	// Login
+	_, err := client.Login()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	tasks, err := client.ListDownloadStationTasks()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	if len(tasks) < 1 {
+		fmt.Println("No tasks found.")
+		return
+	}
+
+	var finishedTasks []string
+	for _, task := range tasks {
+		if task.Status == "finished" {
+			finishedTasks = append(finishedTasks, task.ID)
+		}
+	}
+
+	ft := strings.Join(finishedTasks[:], ",")
+	resp, err := client.DeleteDownloadStationTasks(ft)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	results := client.GetData(resp).([]interface{})
+	for _, result := range results {
+		r := result.(map[string]interface{})
+		if int(r["error"].(float64)) > 0 {
+			fmt.Printf("Could not delete task id %v (%v).\n", r["id"], synoclient.DsSynoErrors[int(r["error"].(float64))])
+		} else {
+			fmt.Printf("Task %v deleted.\n", r["id"])
+		}
 	}
 
 	// Logout
